@@ -26,13 +26,13 @@ class Lead extends AbstractModel
         'last_modified',
         'status_id',
         'pipeline_id',
-        'price',
+        'sale',
         'responsible_user_id',
         'created_user_id',
         'request_id',
         'linked_company_id',
         'tags',
-        'visitor_uid',
+        'contacts_id',
         'notes',
         'modified_user_id',
     ];
@@ -140,21 +140,19 @@ class Lead extends AbstractModel
         }
 
         $parameters = [
-            'leads' => [
-                'add' => [],
-            ],
+            'add' => []
         ];
 
         foreach ($leads AS $lead) {
-            $parameters['leads']['add'][] = $lead->getValues();
+            $parameters['add'][] = $lead->getValues();
         }
 
-        $response = $this->postRequest('/private/api/v2/json/leads/set', $parameters);
+        $response = $this->postRequest2('/api/v2/leads', $parameters);
 
-        if (isset($response['leads']['add'])) {
+        if (isset($response['_embedded']['items'])) {
             $result = array_map(function($item) {
                 return $item['id'];
-            }, $response['leads']['add']);
+            }, $response['_embedded']['items']);
         } else {
             return [];
         }

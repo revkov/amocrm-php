@@ -141,6 +141,15 @@ class Request
         return $this->request($url);
     }
 
+    protected function postRequest2($url, $parameters = [])
+    {
+        if (!empty($parameters)) {
+            $this->parameters->addPost($parameters);
+        }
+
+        return $this->request2($url);
+    }
+
     /**
      * Подготавливает список заголовков HTTP
      *
@@ -194,6 +203,55 @@ class Request
      * @throws Exception
      * @throws NetworkException
      */
+    protected function request2($url, $modified = null)
+    {
+        $headers = $this->prepareHeaders($modified);
+        $endpoint = $this->prepareEndpoint($url);
+
+        $this->printDebug('url', $endpoint);
+        $this->printDebug('headers', $headers);
+
+        $ch = curl_init();
+
+        curl_setopt($ch, CURLOPT_URL, $endpoint);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+
+        if ($this->parameters->hasPost()) {
+            $fields = json_encode($this->parameters->getPost());
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $fields);
+            $this->printDebug('post params', $fields);
+        }
+
+        if ($this->parameters->hasProxy()) {
+            curl_setopt($ch, CURLOPT_PROXY, $this->parameters->getProxy());
+        }
+
+        $result = curl_exec($ch);
+        $info = curl_getinfo($ch);
+        $error = curl_error($ch);
+        $errno = curl_errno($ch);
+
+        curl_close($ch);
+
+        $this->lastHttpCode = $info['http_code'];
+        $this->lastHttpResponse = $result;
+
+        $this->printDebug('curl_exec', $result);
+        $this->printDebug('curl_getinfo', $info);
+        $this->printDebug('curl_error', $error);
+        $this->printDebug('curl_errno', $errno);
+
+        if ($result === false && !empty($error)) {
+            throw new NetworkException($error, $errno);
+        }
+
+        return $this->parseResponse2($result, $info);
+    }
+
     protected function request($url, $modified = null)
     {
         $headers = $this->prepareHeaders($modified);
@@ -277,6 +335,26 @@ class Request
         }
 
         return $result['response'];
+    }
+
+    protected function parseResponse2($response, $info)
+    {
+        $result = json_decode($response, true);
+
+        if (floor($info['http_code'] / 100) >= 3) {
+            if ($result !== null) {
+                $code = 200;
+            } else {
+                $code = $info['http_code'];
+            }
+            if ($code!=200) {
+                throw new Exception('Invalid response body.', $code);
+            }
+        } elseif (!isset($result['_embedded'])) {
+            return false;
+        }
+
+        return $result;
     }
 
     /**
